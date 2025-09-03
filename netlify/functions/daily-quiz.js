@@ -4,9 +4,9 @@ const path = require('path');
 
 /**
  * 로컬 JSON 파일에서 퀴즈를 읽어와 무작위로 10개를 반환하는 대체 함수
- * @returns {Array} 퀴즈 객체 배열
  */
 function getFallbackQuizzes() {
+    console.log("Using fallback quizzes.");
     const dataDir = path.resolve(process.cwd(), 'data');
     const files = fs.readdirSync(dataDir);
     let allQuizzes = [];
@@ -23,17 +23,19 @@ function getFallbackQuizzes() {
         }
     }
 
-    // 배열을 무작위로 섞기 (Fisher-Yates shuffle)
     for (let i = allQuizzes.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [allQuizzes[i], allQuizzes[j]] = [allQuizzes[j], allQuizzes[i]];
     }
-    return allQuizzes.slice(0, 10); // 10개의 퀴즈 선택
+    return allQuizzes.slice(0, 10);
 }
 
 exports.handler = async function(event, context) {
     // 1. Gemini API를 통해 퀴즈 생성 시도
     try {
+        if (!process.env.GEMINI_API_KEY) {
+            throw new Error("GEMINI_API_KEY is not set.");
+        }
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
@@ -46,13 +48,18 @@ exports.handler = async function(event, context) {
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        const text = response.text();
+        let text = response.text();
         
+        // Gemini API가 ```json ... ``` 형식으로 응답하는 경우가 있으므로, 순수 JSON만 추출합니다.
+        const jsonMatch = text.match(/```(?:json)?([\s\S]*?)```/);
+        if (jsonMatch && jsonMatch[1]) {
+            text = jsonMatch[1].trim();
+        }
+
         const dailyQuizzes = JSON.parse(text);
 
-        // 생성된 데이터가 유효한지 간단히 확인
         if (!Array.isArray(dailyQuizzes) || dailyQuizzes.length === 0) {
-            throw new Error("Gemini API가 유효한 퀴즈 배열을 생성하지 않았습니다.");
+            throw new Error("Gemini API did not return a valid quiz array.");
         }
 
         return {
@@ -62,7 +69,7 @@ exports.handler = async function(event, context) {
         };
 
     } catch (error) {
-        console.error("Gemini API 호출 실패, 대체 퀴즈를 사용합니다:", error);
+        console.error("Gemini API call failed, using fallback:", error);
         
         // 2. Gemini API 실패 시, 로컬 파일에서 퀴즈를 가져오는 대체 로직 실행
         try {
@@ -73,10 +80,10 @@ exports.handler = async function(event, context) {
                 body: JSON.stringify(fallbackQuizzes),
             };
         } catch (fallbackError) {
-            console.error("대체 퀴즈 로딩에도 실패했습니다:", fallbackError);
+            console.error("Fallback quiz loading also failed:", fallbackError);
             return { 
                 statusCode: 500, 
-                body: JSON.stringify({ error: 'API와 로컬 파일 모두에서 퀴즈를 불러오는데 실패했습니다.' }) 
+                body: JSON.stringify({ error: 'Failed to load quizzes from both API and local files.' }) 
             };
         }
     }

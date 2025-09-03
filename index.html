@@ -48,8 +48,6 @@
         .speech-bubble:after { content: ''; position: absolute; left: 0; top: 50%; width: 0; height: 0; border: 20px solid transparent; border-right-color: var(--bg-color); border-left: 0; border-bottom: 0; margin-top: -10px; margin-left: -20px; }
     </style>
 
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5484135271892898"
-     crossorigin="anonymous"></script>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
 
@@ -221,22 +219,25 @@
             streak: 0,
             lastVisit: null,
             settings: { darkMode: false, fontSize: "base", soundEnabled: true, bgmEnabled: true, selectedPet: "cat" },
-            dailyQuiz: { date: null, questions: [] }
+            dailyQuiz: { date: null, questions: [] },
+            incorrectQuizzes: []
         };
         
-        let allQuizzes = [];
-        let timeAttackTimer;
-        let timeLeft = 60;
-        let timeAttackSolvedQuizzes = [];
-        let isTimeAttackMode = false;
-        let reviewIndex = 0;
+        // 전역 상태 변수
+        let allQuizzes = []; // 모든 퀴즈를 미리 로드하여 저장하는 배열
+        let currentQuizData = [], currentQuizIndex = 0, score = 0;
+        let answerSelected = false, isReviewMode = false, isTimeAttackMode = false;
 
-        let incorrectQuizzes = [], currentQuizData = [], currentQuizIndex = 0, score = 0, answerSelected = false, isReviewMode = false;
+        // 타임어택 관련 변수
+        let timeAttackTimer, timeLeft = 60, timeAttackSolvedQuizzes = [], reviewIndex = 0;
+
+        // 오답노트 관련 변수는 gameState.incorrectQuizzes로 통합
 
         const mainScreen = document.getElementById('main-screen');
         const quizScreen = document.getElementById('quiz-screen');
         const feedbackModal = document.getElementById('feedback-modal');
         const loadingSpinner = document.getElementById('loading-spinner');
+        const quizContainer = document.getElementById('quiz-container');
         const questionEl = document.getElementById('question');
         const optionsContainer = document.getElementById('options-container');
         const explanationContainer = document.getElementById('explanation-container');
@@ -273,6 +274,7 @@
                     gameState.lastVisit = parsedState.lastVisit || null;
                     if (parsedState.settings) gameState.settings = { ...gameState.settings, ...parsedState.settings };
                     if (parsedState.dailyQuiz) gameState.dailyQuiz = { ...gameState.dailyQuiz, ...parsedState.dailyQuiz };
+                    gameState.incorrectQuizzes = parsedState.incorrectQuizzes || [];
                 } catch (e) {
                     console.error("저장된 게임 상태를 불러오는 데 실패했습니다:", e);
                     localStorage.removeItem('quizGameState');
@@ -481,15 +483,16 @@ async function startDailyQuiz() {
                 } else {
                     if(gameState.settings.soundEnabled) incorrectSound.triggerAttackRelease("C3", "0.2");
                     button.classList.add('incorrect');
-                    button.disabled = true; // 틀린 버튼 비활성화
                     
-                    // 2초 패널티
-                    optionsContainer.classList.add('pointer-events-none');
+                    // 시간 차감 패널티로 변경
+                    timeLeft = Math.max(0, timeLeft - 3); // 3초 차감
+                    if (timeLeft <= 0) {
+                        endTimeAttack();
+                    }
+                    // 틀린 버튼은 잠시 후 원래대로 돌아와 다른 선택을 유도
                     setTimeout(() => {
                         button.classList.remove('incorrect');
-                        button.disabled = false;
-                        optionsContainer.classList.remove('pointer-events-none');
-                    }, 2000); // 2초 패널티로 변경
+                    }, 500);
                 }
                 return;
             }
@@ -508,16 +511,16 @@ async function startDailyQuiz() {
                 feedbackMessage = currentPet.correct[Math.floor(Math.random() * currentPet.correct.length)];
                 explanationContainer.classList.add('bg-green-100', 'dark:bg-green-900');
                 if (isReviewMode) {
-                    const originalIndex = incorrectQuizzes.findIndex(q => q.question === currentQuiz.question);
+                    const originalIndex = gameState.incorrectQuizzes.findIndex(q => q.question === currentQuiz.question);
                     if (originalIndex > -1) {
-                        incorrectQuizzes.splice(originalIndex, 1);
+                        gameState.incorrectQuizzes.splice(originalIndex, 1);
                     }
                 }
             } else {
                 button.classList.add('incorrect');
                 if(gameState.settings.soundEnabled) incorrectSound.triggerAttackRelease("C3", "0.2");
-                if (!isReviewMode && !incorrectQuizzes.some(q => q.question === currentQuiz.question)) {
-                    incorrectQuizzes.push(currentQuiz);
+                if (!isReviewMode && !gameState.incorrectQuizzes.some(q => q.question === currentQuiz.question)) {
+                    gameState.incorrectQuizzes.push(currentQuiz);
                 }
                 Array.from(optionsContainer.children).forEach(btn => {
                     if (btn.innerText === currentQuiz.answer) btn.classList.add('correct');
@@ -590,33 +593,12 @@ async function startDailyQuiz() {
             }
         }
 
-
-        async function loadAllQuizzes() {
-            if (allQuizzes.length > 0) return; // 이미 로드되었으면 실행 안 함
-            loadingSpinner.classList.remove('hidden');
-            try {
-                const quizPromises = Object.values(quizInfo).map(info => fetch(info.file).then(res => res.json()));
-                const allQuizData = await Promise.all(quizPromises);
-                // 챕터 구조에서 모든 문제를 평탄화
-                allQuizzes = allQuizData.flatMap(themeArr =>
-                    Array.isArray(themeArr)
-                        ? themeArr.flatMap(ch => Array.isArray(ch.quizzes) ? ch.quizzes : [])
-                        : []
-                );
-            } catch (error) {
-                console.error("전체 퀴즈 데이터 로딩 실패:", error);
-            } finally {
-                loadingSpinner.classList.add('hidden');
-            }
-        }
-
         async function startTimeAttack() {
             loadingSpinner.classList.remove('hidden');
             try {
-                const allQuizzes = await getAllFlatQuizzes();
+                // 미리 로드된 'allQuizzes' 배열을 사용합니다.
                 if (allQuizzes.length === 0) {
-                    alert("퀴즈 데이터가 없습니다.");
-                    loadingSpinner.classList.add('hidden');
+                    alert("퀴즈 데이터를 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
                     return;
                 }
                 isTimeAttackMode = true;
@@ -675,11 +657,11 @@ async function startDailyQuiz() {
 
         function showNotes() {
             const retryBtn = document.getElementById('retry-notes-btn');
-            if (incorrectQuizzes.length === 0) {
+            if (gameState.incorrectQuizzes.length === 0) {
                 notesContent.innerHTML = '<p class="text-center">아직 틀린 문제가 없습니다. 훌륭해요!</p>';
                 retryBtn.disabled = true;
             } else {
-                notesContent.innerHTML = incorrectQuizzes.map((q, index) => `
+                notesContent.innerHTML = gameState.incorrectQuizzes.map((q, index) => `
                     <div class="relative mb-2 p-3 bg-slate-50 dark:bg-slate-700 rounded group">
                         <p class="font-bold pr-8">${index + 1}. ${q.question}</p>
                         <p class="text-sm text-green-600">정답: ${q.answer}</p>
@@ -756,23 +738,13 @@ function startQuizWithChapter(quizArr, themeKey, chapterName) {
     quizContainer.classList.remove('hidden');
 }
 
-// 4. 테마 버튼 클릭 시 챕터 선택으로 연결
-document.querySelectorAll('.theme-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const themeKey = btn.dataset.theme;
-        if (quizInfo[themeKey]) {
-            document.getElementById('theme-modal').classList.add('hidden');
-            showChapterSelect(themeKey);
-        }
-    });
-});
-
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             loadGameState();
             applySettings();
             checkAttendance();
             updateMainUI();
-            loadAllQuizzes(); // 앱 시작 시 모든 퀴즈 미리 로드
+            // 앱 시작 시 모든 퀴즈를 미리 불러와 allQuizzes 배열에 저장합니다.
+            allQuizzes = await getAllFlatQuizzes();
 
             document.querySelectorAll('.main-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -825,7 +797,7 @@ document.querySelectorAll('.theme-btn').forEach(btn => {
             });
 
             document.getElementById('retry-notes-btn').addEventListener('click', () => {
-                const reviewQuizzes = shuffleArray([...incorrectQuizzes]).slice(0, 10);
+                const reviewQuizzes = shuffleArray([...gameState.incorrectQuizzes]).slice(0, 10);
                 if (reviewQuizzes.length > 0) {
                     document.getElementById('notes-modal').classList.add('hidden');
                     startQuiz('review', reviewQuizzes);
@@ -872,7 +844,8 @@ document.querySelectorAll('.theme-btn').forEach(btn => {
                 const deleteBtn = e.target.closest('.delete-note-btn');
                 if (deleteBtn) {
                     const indexToRemove = parseInt(deleteBtn.dataset.index, 10);
-                    incorrectQuizzes.splice(indexToRemove, 1);
+                    gameState.incorrectQuizzes.splice(indexToRemove, 1);
+                    saveGameState(); // 오답 노트 삭제 후 상태 저장
                     showNotes();
                 }
             });
