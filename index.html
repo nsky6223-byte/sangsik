@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>상식 퀴즈 앱</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💡</text></svg>">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5484135271892898"
      crossorigin="anonymous"></script>
@@ -47,6 +46,12 @@
         @keyframes bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-15px); } 60% { transform: translateY(-7px); } }
         .speech-bubble { position: relative; background: var(--bg-color); border-radius: .4em; }
         .speech-bubble:after { content: ''; position: absolute; left: 0; top: 50%; width: 0; height: 0; border: 20px solid transparent; border-right-color: var(--bg-color); border-left: 0; border-bottom: 0; margin-top: -10px; margin-left: -20px; }
+        @keyframes time-penalty-flash {
+            50% { color: #f87171; /* red-400 */ transform: scale(1.1); }
+        }
+        .time-penalty {
+            animation: time-penalty-flash 0.4s ease-in-out;
+        }
     </style>
 
 </head>
@@ -83,11 +88,15 @@
     <div id="quiz-screen" class="card rounded-2xl shadow-xl p-6 md:p-8 w-full max-w-2xl hidden">
         <div class="flex items-center mb-4">
             <button id="home-btn" class="text-slate-400 hover:text-slate-600 mr-4 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg></button>
-            <!-- 타임어택 타이머 디스플레이 추가 -->
-            <div id="timer-display" class="text-2xl font-bold text-red-500 hidden">01:00</div>
-            <div id="progress-container" class="w-full">
-                <div class="flex justify-between items-center mb-1"><span id="quiz-theme-title" class="text-base font-medium text-blue-500"></span><span id="progress-text" class="text-sm font-medium text-blue-500"></span></div>
-                <div class="w-full bg-gray-200 rounded-full h-2.5"><div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div></div>
+            <div class="flex-grow flex items-center justify-center"> <!-- Centering wrapper -->
+                <div id="timer-container" class="flex items-baseline hidden">
+                    <div id="timer-display" class="text-2xl font-bold text-red-500">01:00</div>
+                    <div id="time-penalty-indicator" class="ml-2 text-xl font-bold text-red-500"></div>
+                </div>
+                <div id="progress-container" class="w-full">
+                    <div class="flex justify-between items-center mb-1"><span id="quiz-theme-title" class="text-base font-medium text-blue-500"></span><span id="progress-text" class="text-sm font-medium text-blue-500"></span></div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5"><div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div></div>
+                </div>
             </div>
         </div>
         <div id="quiz-container"><h2 id="question" class="text-2xl md:text-3xl font-bold my-6 min-h-[100px]"></h2><div id="options-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div></div>
@@ -256,7 +265,8 @@
         const feedbackMessageEl = document.getElementById('feedback-message');
         const feedbackPetIcon = document.getElementById('feedback-pet-icon');
 
-        // 타임어택 UI 요소
+        // UI 요소
+        const timerContainer = document.getElementById('timer-container');
         const timerDisplay = document.getElementById('timer-display');
         const progressContainer = document.getElementById('progress-container');
         const reviewExplanationsBtn = document.getElementById('review-explanations-btn');
@@ -350,7 +360,11 @@
                     quizThemeTitle.innerText = "오답 복습 퀴즈 🧐";
                     quizThemeTitle.dataset.themeKey = 'review';
                 } else if (themeKey === 'daily') {
-                    data = customData; // 오늘의 퀴즈 데이터는 customData를 통해 전달받습니다.
+                    data = await getDailyQuiz();
+                    if (data.length === 0) { 
+                        loadingSpinner.classList.add('hidden');
+                        return;
+                    }
                     quizThemeTitle.innerText = "오늘의 퀴즈 ✨";
                     quizThemeTitle.dataset.themeKey = 'daily';
                 } else {
@@ -369,7 +383,7 @@
 
                 // UI 초기화
                 progressContainer.classList.remove('hidden');
-                timerDisplay.classList.add('hidden');
+                timerContainer.classList.add('hidden');
                 
                 loadQuiz();
                 showScreen('quiz-screen');
@@ -408,41 +422,74 @@ async function getAllFlatQuizzes() {
     );
 }
 
-// 오늘의 퀴즈: 모든 문제 중 랜덤 10문제
+// 퀴즈 시작을 위한 중앙 집중식 함수
+function initializeQuiz(mode, data, options = {}) {
+    isReviewMode = (mode === 'review');
+    isTimeAttackMode = false;
+    
+    currentQuizData = shuffleArray([...data]); // 원본 데이터 보존을 위해 복사본을 섞음
+    currentQuizIndex = 0;
+    score = 0;
+
+    // UI 초기화 및 설정
+    quizContainer.classList.remove('hidden');
+    resultContainer.classList.add('hidden');
+    progressContainer.classList.remove('hidden');
+    timerContainer.classList.add('hidden');
+    restartBtn.classList.remove('hidden'); // 다시 풀기 버튼 기본적으로 표시
+
+    switch(mode) {
+        case 'daily':
+            quizThemeTitle.innerText = "오늘의 퀴즈 ✨";
+            quizThemeTitle.dataset.themeKey = "daily";
+            break;
+        case 'review':
+            quizThemeTitle.innerText = "오답 복습 퀴즈 🧐";
+            quizThemeTitle.dataset.themeKey = "review";
+            break;
+        case 'theme':
+            quizThemeTitle.innerText = `${quizInfo[options.themeKey].title} - ${options.chapterName}`;
+            quizThemeTitle.dataset.themeKey = options.themeKey;
+            quizThemeTitle.dataset.chapterName = options.chapterName; // 재시작을 위해 챕터 이름 저장
+            break;
+    }
+
+    loadQuiz();
+    showScreen('quiz-screen');
+}
+
+// 오늘의 퀴즈 시작 함수 (캐싱 기능 포함)
 async function startDailyQuiz() {
     loadingSpinner.classList.remove('hidden');
-    isTimeAttackMode = false; // 타임어택 모드가 아님을 확인
-
     const today = new Date().toISOString().split('T')[0];
-    // 이미 오늘 받은 퀴즈가 있는지 확인합니다.
-    if (today === gameState.dailyQuiz.date && gameState.dailyQuiz.questions.length > 0) {
-        // 재실행 시 문제가 없도록 데이터의 '복사본'을 전달합니다.
-        startQuiz('daily', [...gameState.dailyQuiz.questions]);
+
+    // 1. 캐시 확인
+    if (gameState.dailyQuiz.date === today && gameState.dailyQuiz.questions.length > 0) {
+        initializeQuiz('daily', gameState.dailyQuiz.questions);
         loadingSpinner.classList.add('hidden');
         return;
     }
 
-    // 오늘 받은 퀴즈가 없다면 API를 통해 새로 받아옵니다.
+    // 2. 캐시 없으면 API 호출
     try {
         const response = await fetch('/api/daily-quiz');
-        if (!response.ok) {
-            throw new Error(`API request failed with status ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
         const newQuizzes = await response.json();
 
-        // 새로 받은 퀴즈를 오늘 날짜와 함께 저장합니다.
-        gameState.dailyQuiz.date = today;
-        gameState.dailyQuiz.questions = newQuizzes;
+        gameState.dailyQuiz = { date: today, questions: newQuizzes };
         saveGameState();
-
-        // 새로운 퀴즈 데이터의 복사본으로 퀴즈를 시작합니다.
-        startQuiz('daily', [...newQuizzes]);
+        initializeQuiz('daily', newQuizzes);
     } catch (error) {
         console.error("오늘의 퀴즈 로딩 실패:", error);
         alert("AI 퀴즈를 불러오는 데 실패했습니다. 잠시 후 다시 시도해주세요.");
     } finally {
         loadingSpinner.classList.add('hidden');
     }
+}
+
+// 챕터별 퀴즈 시작 함수
+function startQuizWithChapter(quizArr, themeKey, chapterName) {
+    initializeQuiz('theme', quizArr, { themeKey, chapterName });
 }
 
         function loadQuiz() {
@@ -491,7 +538,17 @@ async function startDailyQuiz() {
                     button.classList.add('incorrect');
                     
                     // 시간 차감 패널티로 변경
-                    timeLeft = Math.max(0, timeLeft - 3); // 3초 차감
+                    timeLeft = Math.max(0, timeLeft - 3);
+                    
+                    // 패널티 시각적 피드백
+                    const timePenaltyIndicator = document.getElementById('time-penalty-indicator');
+                    timePenaltyIndicator.innerText = '-3초';
+                    timerDisplay.classList.add('time-penalty');
+                    timerDisplay.addEventListener('animationend', () => {
+                        timerDisplay.classList.remove('time-penalty');
+                    }, { once: true });
+                    setTimeout(() => { timePenaltyIndicator.innerText = ''; }, 1000);
+
                     if (timeLeft <= 0) {
                         endTimeAttack();
                     }
@@ -573,7 +630,7 @@ async function startDailyQuiz() {
             stopTimer(); // 기존 타이머가 있다면 확실히 중지
 
             timeLeft = duration;
-            timerDisplay.classList.remove('hidden');
+            timerContainer.classList.remove('hidden');
 
             const updateDisplay = () => {
                 const minutes = String(Math.floor(timeLeft / 60)).padStart(2, '0');
@@ -614,6 +671,7 @@ async function startDailyQuiz() {
                 timeAttackSolvedQuizzes = [];
 
                 progressContainer.classList.add('hidden');
+                quizContainer.classList.remove('hidden'); // 버그 수정: 결과 화면에서 바로 넘어올 때를 대비
                 quizThemeTitle.innerText = "타임어택 ⏱️";
 
                 loadQuiz();
@@ -711,7 +769,7 @@ async function showChapterSelect(themeKey) {
         chapterList.innerHTML = '';
         chapters.forEach((ch, idx) => {
             const btn = document.createElement('button');
-            btn.className = 'w-full bg-slate-200 rounded-lg p-4 mb-2 font-bold hover:bg-slate-300';
+            btn.className = 'w-full bg-slate-200 dark:bg-slate-600 dark:hover:bg-slate-500 button-custom rounded-lg p-4 mb-2 font-bold hover:bg-slate-300';
             btn.innerText = ch.chapter;
             btn.addEventListener('click', () => {
                 chapterModal.classList.add('hidden');
@@ -725,23 +783,6 @@ async function showChapterSelect(themeKey) {
     } finally {
         loadingSpinner.classList.add('hidden');
     }
-}
-
-// 3. 챕터별 퀴즈 시작 함수
-function startQuizWithChapter(quizArr, themeKey, chapterName) {
-    isReviewMode = false;
-    isTimeAttackMode = false;
-    currentQuizData = quizArr;
-    currentQuizIndex = 0;
-    score = 0;
-    quizThemeTitle.innerText = `${quizInfo[themeKey].title} - ${chapterName}`;
-    quizThemeTitle.dataset.themeKey = themeKey;
-    progressContainer.classList.remove('hidden');
-    timerDisplay.classList.add('hidden');
-    loadQuiz();
-    showScreen('quiz-screen');
-    resultContainer.classList.add('hidden');
-    quizContainer.classList.remove('hidden');
 }
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -806,7 +847,7 @@ function startQuizWithChapter(quizArr, themeKey, chapterName) {
                 const reviewQuizzes = shuffleArray([...gameState.incorrectQuizzes]).slice(0, 10);
                 if (reviewQuizzes.length > 0) {
                     document.getElementById('notes-modal').classList.add('hidden');
-                    startQuiz('review', reviewQuizzes);
+                    initializeQuiz('review', reviewQuizzes);
                 }
             });
 
@@ -833,15 +874,24 @@ function startQuizWithChapter(quizArr, themeKey, chapterName) {
 
             restartBtn.addEventListener('click', () => {
                 const themeKey = quizThemeTitle.dataset.themeKey;
-                if (themeKey === 'review' || themeKey === 'daily') {
-                    showScreen('main-screen');
+                if (themeKey === 'daily') {
+                    startDailyQuiz(); // 캐시된 오늘의 퀴즈를 다시 시작
+                } else if (themeKey === 'review') {
+                    const reviewQuizzes = shuffleArray([...gameState.incorrectQuizzes]).slice(0, 10);
+                    if (reviewQuizzes.length > 0) {
+                        initializeQuiz('review', reviewQuizzes);
+                    } else {
+                        showScreen('main-screen');
+                    }
                 } else {
-                    startQuiz(themeKey);
+                    // 테마 퀴즈는 챕터 선택 화면으로 돌아가서 다시 선택하도록 유도
+                    showChapterSelect(themeKey);
                 }
             });
 
             homeBtn.addEventListener('click', () => {
                 stopTimer(); // 홈으로 갈 때 타이머 중지
+                timerContainer.classList.add('hidden');
                 isTimeAttackMode = false;
                 showScreen('main-screen');
             });
