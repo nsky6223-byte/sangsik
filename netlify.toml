@@ -7,3 +7,9 @@
 [functions]
   # 함수를 배포할 때 함께 포함할 파일 및 폴더 목록
   included_files = ["data/**"]
+
+# API 요청을 서버 함수로 리디렉션하는 규칙
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
