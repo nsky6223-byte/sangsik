@@ -350,11 +350,7 @@
                     quizThemeTitle.innerText = "오답 복습 퀴즈 🧐";
                     quizThemeTitle.dataset.themeKey = 'review';
                 } else if (themeKey === 'daily') {
-                    data = await getDailyQuiz();
-                    if (data.length === 0) { 
-                        loadingSpinner.classList.add('hidden');
-                        return;
-                    }
+                    data = customData; // 오늘의 퀴즈 데이터는 customData를 통해 전달받습니다.
                     quizThemeTitle.innerText = "오늘의 퀴즈 ✨";
                     quizThemeTitle.dataset.themeKey = 'daily';
                 } else {
@@ -415,23 +411,32 @@ async function getAllFlatQuizzes() {
 // 오늘의 퀴즈: 모든 문제 중 랜덤 10문제
 async function startDailyQuiz() {
     loadingSpinner.classList.remove('hidden');
-    isTimeAttackMode = false;
+    isTimeAttackMode = false; // 타임어택 모드가 아님을 확인
+
+    const today = new Date().toISOString().split('T')[0];
+    // 이미 오늘 받은 퀴즈가 있는지 확인합니다.
+    if (today === gameState.dailyQuiz.date && gameState.dailyQuiz.questions.length > 0) {
+        // 재실행 시 문제가 없도록 데이터의 '복사본'을 전달합니다.
+        startQuiz('daily', [...gameState.dailyQuiz.questions]);
+        loadingSpinner.classList.add('hidden');
+        return;
+    }
+
+    // 오늘 받은 퀴즈가 없다면 API를 통해 새로 받아옵니다.
     try {
-        // 우리 서버의 API 엔드포인트를 호출합니다.
         const response = await fetch('/api/daily-quiz');
+        if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`);
+        }
         const newQuizzes = await response.json();
 
-        currentQuizData = newQuizzes;
-        currentQuizIndex = 0;
-        score = 0;
-        quizThemeTitle.innerText = "오늘의 퀴즈 ✨";
-        quizThemeTitle.dataset.themeKey = "daily";
-        progressContainer.classList.remove('hidden');
-        timerDisplay.classList.add('hidden');
-        loadQuiz();
-        showScreen('quiz-screen');
-        resultContainer.classList.add('hidden');
-        
+        // 새로 받은 퀴즈를 오늘 날짜와 함께 저장합니다.
+        gameState.dailyQuiz.date = today;
+        gameState.dailyQuiz.questions = newQuizzes;
+        saveGameState();
+
+        // 새로운 퀴즈 데이터의 복사본으로 퀴즈를 시작합니다.
+        startQuiz('daily', [...newQuizzes]);
     } catch (error) {
         console.error("오늘의 퀴즈 로딩 실패:", error);
         alert("AI 퀴즈를 불러오는 데 실패했습니다. 잠시 후 다시 시도해주세요.");
