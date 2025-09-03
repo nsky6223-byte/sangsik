@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>교양 퀴즈 앱</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5484135271892898"
+     crossorigin="anonymous"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f1f5f9; /* slate-100 */
+            --text-color: #1e293b; /* slate-800 */
+            --card-bg-color: #ffffff;
+            --subtext-color: #64748b; /* slate-500 */
+            --border-color: #e2e8f0; /* slate-200 */
+            --button-text-color: #334155; /* slate-700 */
+        }
+        html.dark {
+            --bg-color: #0f172a; /* slate-900 */
+            --text-color: #f1f5f9; /* slate-100 */
+            --card-bg-color: #1e293b; /* slate-800 */
+            --subtext-color: #94a3b8; /* slate-400 */
+            --border-color: #334155; /* slate-700 */
+            --button-text-color: #cbd5e1; /* slate-300 */
+        }
+        body { 
+            font-family: 'Noto Sans KR', sans-serif; 
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .card { background-color: var(--card-bg-color); }
+        .subtext { color: var(--subtext-color); }
+        .border-custom { border-color: var(--border-color); }
+        .button-custom { color: var(--button-text-color); }
+
+        .hidden { display: none; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .option-btn.correct { background-color: #22c55e; color: white; border-color: #16a34a; }
+        .option-btn.incorrect { background-color: #ef4444; color: white; border-color: #dc2626; }
+        .pet-bounce { animation: bounce 2s infinite; }
+        @keyframes bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-15px); } 60% { transform: translateY(-7px); } }
+        .speech-bubble { position: relative; background: var(--bg-color); border-radius: .4em; }
+        .speech-bubble:after { content: ''; position: absolute; left: 0; top: 50%; width: 0; height: 0; border: 20px solid transparent; border-right-color: var(--bg-color); border-left: 0; border-bottom: 0; margin-top: -10px; margin-left: -20px; }
+    </style>
+
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5484135271892898"
+     crossorigin="anonymous"></script>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <!-- 배경음악 플레이어: audio/background.mp3 파일을 폴더에 추가해주세요. -->
+    <audio id="bgm" loop src="audio/background.mp3"></audio>
+
+    <div id="loading-spinner" class="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50 hidden"><div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div></div>
+
+    <!-- 1. 메인 화면 -->
+    <div id="main-screen" class="w-full max-w-md mx-auto text-center">
+        <div class="mb-8 p-4 card rounded-2xl shadow-md">
+            <div id="pet-display" class="text-6xl pet-bounce">🐱</div>
+            <div id="pet-name" class="font-bold mt-2">나비</div>
+            <div id="streak-display" class="mt-4 text-orange-500 font-bold text-lg">🔥 0일 연속 출석!</div>
+        </div>
+        <header class="mb-8">
+            <h1 class="text-5xl font-bold tracking-tight">상식 퀴즈 앱</h1>
+            <p class="subtext mt-2">매일매일 성장하는 지식의 즐거움</p>
+        </header>
+        <main class="space-y-4">
+            <button id="daily-quiz-btn" class="main-btn w-full bg-green-500 text-white font-bold py-4 px-6 rounded-lg shadow-lg hover:bg-green-600">오늘의 퀴즈 ✨</button>
+            <!-- 타임어택 버튼 추가 -->
+            <button id="time-attack-btn" class="main-btn w-full bg-orange-500 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-orange-600">타임어택 ⏱️</button>
+            <button id="theme-select-btn" class="main-btn w-full bg-blue-500 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-blue-600">테마 퀴즈</button>
+            <button id="pet-select-btn" class="main-btn w-full card button-custom font-bold py-3 px-6 rounded-lg shadow-md hover:bg-slate-200">펫 선택</button>
+            <button id="notes-btn" class="main-btn w-full card button-custom font-bold py-3 px-6 rounded-lg shadow-md hover:bg-slate-200">오답노트</button>
+            <button id="settings-btn" class="main-btn w-full card button-custom font-bold py-3 px-6 rounded-lg shadow-md hover:bg-slate-200">설정</button>
+        </main>
+    </div>
+
+    <!-- 2. 퀴즈 진행 화면 -->
+    <div id="quiz-screen" class="card rounded-2xl shadow-xl p-6 md:p-8 w-full max-w-2xl hidden">
+        <div class="flex items-center mb-4">
+            <button id="home-btn" class="text-slate-400 hover:text-slate-600 mr-4 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg></button>
+            <!-- 타임어택 타이머 디스플레이 추가 -->
+            <div id="timer-display" class="text-2xl font-bold text-red-500 hidden">01:00</div>
+            <div id="progress-container" class="w-full">
+                <div class="flex justify-between items-center mb-1"><span id="quiz-theme-title" class="text-base font-medium text-blue-500"></span><span id="progress-text" class="text-sm font-medium text-blue-500"></span></div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5"><div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div></div>
+            </div>
+        </div>
+        <div id="quiz-container"><h2 id="question" class="text-2xl md:text-3xl font-bold my-6 min-h-[100px]"></h2><div id="options-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div></div>
+        <div id="result-container" class="text-center hidden">
+            <h2 id="result-title" class="text-4xl font-bold my-6">퀴즈 완료!</h2>
+            <p id="result-message" class="text-xl subtext mb-8">총 <span id="total-questions" class="font-bold">0</span>문제 중 <span id="score" class="font-bold text-blue-500">0</span>개를 맞히셨습니다!</p>
+            <button id="restart-btn" class="bg-blue-500 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:bg-blue-600">다시 풀기</button>
+            <!-- 타임어택 해설 보기 버튼 추가 -->
+            <button id="review-explanations-btn" class="bg-purple-500 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:bg-purple-600 mt-4 hidden">해설 보기</button>
+        </div>
+    </div>
+
+    <!-- 3. 피드백 모달 -->
+    <div id="feedback-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 fade-in">
+        <div class="card rounded-2xl shadow-2xl p-8 w-full max-w-md">
+            <div class="flex items-center"><div id="feedback-pet-icon" class="text-6xl mr-6">🐱</div><div class="speech-bubble p-4 flex-1"><p id="feedback-message" class="font-bold text-lg"></p></div></div>
+            <div id="explanation-container" class="mt-6 p-4 rounded-lg border border-custom">
+                <h3 class="font-bold text-lg mb-2">해설</h3><p id="explanation-text" class="subtext"></p>
+            </div>
+            <div class="mt-8 text-right"><button id="next-btn" class="bg-blue-500 text-white font-bold py-2 px-8 rounded-lg hover:bg-blue-600">다음</button></div>
+        </div>
+    </div>
+
+    <!-- 4. 기타 모달 창들 -->
+    <div id="theme-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 fade-in"><div class="card rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center"><h2 class="text-2xl font-bold mb-6">테마 선택</h2><div class="space-y-3 max-h-80 overflow-y-auto"><button data-theme="art" class="theme-btn w-full bg-amber-400 text-white py-3 rounded-lg hover:bg-amber-500">미술 🎨</button><button data-theme="history" class="theme-btn w-full bg-teal-500 text-white py-3 rounded-lg hover:bg-teal-600">세계사 🌍</button><button data-theme="korean" class="theme-btn w-full bg-purple-500 text-white py-3 rounded-lg hover:bg-purple-600">우리말 겨루기 🇰🇷</button><button data-theme="capitals" class="theme-btn w-full bg-indigo-500 text-white py-3 rounded-lg hover:bg-indigo-600">세계 수도 맞히기 🗺️</button><button data-theme="idioms" class="theme-btn w-full bg-red-500 text-white py-3 rounded-lg hover:bg-red-600">사자성어 📖</button><button data-theme="proverbs" class="theme-btn w-full bg-lime-500 text-white py-3 rounded-lg hover:bg-lime-600">속담 빈칸 ✍️</button></div><button class="modal-close-btn mt-8 bg-slate-200 button-custom py-2 px-6 rounded-lg hover:bg-slate-300">닫기</button></div></div>
+    <div id="notes-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 fade-in"><div class="card rounded-2xl shadow-2xl p-8 w-full max-w-md"><h2 class="text-2xl font-bold mb-4 text-center">오답노트</h2><div id="notes-content" class="subtext mb-6 max-h-80 overflow-y-auto p-1"></div><div class="flex justify-center space-x-4"><button id="retry-notes-btn" class="bg-green-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed">다시 도전!</button><button class="modal-close-btn bg-slate-200 button-custom py-2 px-6 rounded-lg hover:bg-slate-300">닫기</button></div></div></div>
+    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 fade-in">
+    <div class="card rounded-2xl shadow-2xl p-8 w-full max-w-sm">
+        <h2 class="text-2xl font-bold mb-6 text-center">설정</h2>
+        <div class="space-y-6">
+            <div class="flex items-center justify-between">
+                <span class="font-medium">다크 모드</span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="dark-mode-toggle" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+            </div>
+            <div>
+                <span class="font-medium">글자 크기</span>
+                <div id="font-size-controls" class="flex justify-between mt-2 rounded-lg bg-sky-100 dark:bg-slate-700 p-1">
+                    <button data-size="sm" class="w-full rounded-md py-1">작게</button>
+                    <button data-size="base" class="w-full rounded-md py-1">보통</button>
+                    <button data-size="lg" class="w-full rounded-md py-1">크게</button>
+                </div>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="font-medium">배경음악</span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="bgm-toggle" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="font-medium">효과음</span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="sound-toggle" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+            </div>
+        </div>
+        <div class="text-center">
+            <button class="modal-close-btn mt-8 bg-slate-200 button-custom py-2 px-6 rounded-lg hover:bg-slate-300">닫기</button>
+            <!-- 개발자 커피 사주기 버튼 (임시 비활성화)
+            <div class="text-center">
+                <button id="coffee-btn" class="mt-4 bg-yellow-400 text-white font-bold py-2 px-6 rounded-lg hover:bg-yellow-500 flex items-center justify-center mx-auto">
+                    ☕ 개발자 커피 사주기
+                </button>
+            </div>
+            -->
+        </div>
+    </div>
+</div>
+    <div id="pet-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 fade-in">
+        <div class="card rounded-2xl shadow-2xl p-8 w-full max-w-lg">
+            <h2 class="text-2xl font-bold mb-6 text-center">함께할 펫을 선택하세요!</h2>
+            <div id="pet-selection-container" class="space-y-4 max-h-80 overflow-y-auto"></div>
+            <div class="text-center">
+                <button class="modal-close-btn mt-8 bg-slate-200 button-custom py-2 px-6 rounded-lg hover:bg-slate-300">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. 챕터 선택 모달 -->
+    <div id="chapter-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 fade-in">
+        <div class="card rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
+            <h2 class="text-2xl font-bold mb-6">챕터 선택</h2>
+            <div id="chapter-list" class="space-y-3 max-h-80 overflow-y-auto"></div>
+            <button class="modal-close-btn mt-8 bg-slate-200 button-custom py-2 px-6 rounded-lg hover:bg-slate-300">닫기</button>
+        </div>
+    </div>
+
+    <script>
+        const quizInfo = {
+    art: { title: "미술 🎨", file: "data/art.json" },
+    history: { title: "세계사 🌍", file: "data/history.json" },
+    korean: { title: "우리말 겨루기 🇰🇷", file: "data/korean.json" },
+    capitals: { title: "세계 수도 맞히기 🗺️", file: "data/capitals.json" },
+    idioms: { title: "사자성어 📖", file: "data/idioms.json" },
+    proverbs: { title: "속담 빈칸 ✍️", file: "data/proverbs.json" }
+};
+
+        const petInfo = {
+            cat: { name: '나비', icon: '🐱', description: '시크하지만 다정한 츤데레.', correct: ["흥, 이 정도는 당연하잖아?", "제법이네.", "나쁘지 않군."], incorrect: ["...다음엔 잘 하든가.", "집중 안 해?", "쯧..."] },
+            dog: { name: '멍뭉이', icon: '🐶', description: '활발하고 긍정적인 응원단장.', correct: ["와! 최고! 최고!", "우리 주인님 천재!", "정답! 신난다! 멍멍!"], incorrect: ["괜찮아! 내가 있잖아!", "힘내! 할 수 있어!", "하나 틀려도 괜찮아!"] },
+            owl: { name: '부엉박사', icon: '🦉', description: '지적이고 분석적인 조언가.', correct: ["훌륭한 추론입니다.", "지식이 +1 상승했습니다.", "정확한 분석입니다."], incorrect: ["오답의 원인을 분석해 봅시다.", "이 부분은 다시 학습할 필요가 있겠군요.", "다른 가능성을 고려해보시죠."] }
+        };
+
+        const clickSound = new Tone.Synth({ oscillator: { type: "sine" }, envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 } }).toDestination();
+        const correctSound = new Tone.Synth({ oscillator: { type: "sine" }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.2 } }).toDestination();
+        const incorrectSound = new Tone.Synth({ oscillator: { type: "triangle" }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.2 } }).toDestination();
+
+        let isBgmInitialized = false;
+
+        function manageBgm() {
+            const bgm = document.getElementById('bgm');
+            if (!bgm) return;
+            if (gameState.settings.bgmEnabled) {
+                const playPromise = bgm.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log("BGM 자동 재생이 차단되었습니다. 사용자 클릭 후 재생됩니다.");
+                    });
+                }
+            } else {
+                bgm.pause();
+            }
+        }
+
+        let gameState = {
+            streak: 0,
+            lastVisit: null,
+            settings: { darkMode: false, fontSize: "base", soundEnabled: true, bgmEnabled: true, selectedPet: "cat" },
+            dailyQuiz: { date: null, questions: [] }
+        };
+        
+        let allQuizzes = [];
+        let timeAttackTimer;
+        let timeLeft = 60;
+        let timeAttackSolvedQuizzes = [];
+        let isTimeAttackMode = false;
+        let reviewIndex = 0;
+
+        let incorrectQuizzes = [], currentQuizData = [], currentQuizIndex = 0, score = 0, answerSelected = false, isReviewMode = false;
+
+        const mainScreen = document.getElementById('main-screen');
+        const quizScreen = document.getElementById('quiz-screen');
+        const feedbackModal = document.getElementById('feedback-modal');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const questionEl = document.getElementById('question');
+        const optionsContainer = document.getElementById('options-container');
+        const explanationContainer = document.getElementById('explanation-container');
+        const explanationTextEl = document.getElementById('explanation-text');
+        const nextBtn = document.getElementById('next-btn');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const resultContainer = document.getElementById('result-container');
+        const scoreEl = document.getElementById('score');
+        const totalQuestionsEl = document.getElementById('total-questions');
+        const restartBtn = document.getElementById('restart-btn');
+        const homeBtn = document.getElementById('home-btn');
+        const quizThemeTitle = document.getElementById('quiz-theme-title');
+        const notesContent = document.getElementById('notes-content');
+        const feedbackMessageEl = document.getElementById('feedback-message');
+        const feedbackPetIcon = document.getElementById('feedback-pet-icon');
+
+        // 타임어택 UI 요소
+        const timerDisplay = document.getElementById('timer-display');
+        const progressContainer = document.getElementById('progress-container');
+        const reviewExplanationsBtn = document.getElementById('review-explanations-btn');
+        const resultTitle = document.getElementById('result-title');
+        const resultMessage = document.getElementById('result-message');
+        
+
+        function saveGameState() { localStorage.setItem('quizGameState', JSON.stringify(gameState)); }
+
+        function loadGameState() {
+            const savedState = localStorage.getItem('quizGameState');
+            if (savedState) {
+                try {
+                    const parsedState = JSON.parse(savedState);
+                    gameState.streak = parsedState.streak || 0;
+                    gameState.lastVisit = parsedState.lastVisit || null;
+                    if (parsedState.settings) gameState.settings = { ...gameState.settings, ...parsedState.settings };
+                    if (parsedState.dailyQuiz) gameState.dailyQuiz = { ...gameState.dailyQuiz, ...parsedState.dailyQuiz };
+                } catch (e) {
+                    console.error("저장된 게임 상태를 불러오는 데 실패했습니다:", e);
+                    localStorage.removeItem('quizGameState');
+                }
+            }
+        }
+
+        function applySettings() {
+            document.documentElement.classList.toggle('dark', gameState.settings.darkMode);
+            document.body.classList.remove('text-sm', 'text-base', 'text-lg');
+            document.body.classList.add(`text-${gameState.settings.fontSize}`);
+            
+            const darkModeToggle = document.getElementById('dark-mode-toggle');
+            if(darkModeToggle) darkModeToggle.checked = gameState.settings.darkMode;
+
+            const soundToggle = document.getElementById('sound-toggle');
+            if(soundToggle) soundToggle.checked = gameState.settings.soundEnabled;
+
+            const bgmToggle = document.getElementById('bgm-toggle');
+            if(bgmToggle) bgmToggle.checked = gameState.settings.bgmEnabled;
+
+            const fontSizeControls = document.getElementById('font-size-controls');
+            if(fontSizeControls) {
+                [...fontSizeControls.children].forEach(btn => {
+                    btn.classList.toggle('bg-blue-500', btn.dataset.size === gameState.settings.fontSize);
+                    btn.classList.toggle('text-white', btn.dataset.size === gameState.settings.fontSize);
+                });
+            }
+        }
+
+        function updateMainUI() {
+            document.getElementById('streak-display').innerText = `🔥 ${gameState.streak}일 연속 출석!`;
+            const currentPet = petInfo[gameState.settings.selectedPet] || petInfo.cat;
+            document.getElementById('pet-display').innerText = currentPet.icon;
+            document.getElementById('pet-name').innerText = currentPet.name;
+        }
+
+        function checkAttendance() {
+            const today = new Date().toDateString();
+            if (gameState.lastVisit !== today) {
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                if (gameState.lastVisit === yesterday.toDateString()) gameState.streak++;
+                else gameState.streak = 1;
+                gameState.lastVisit = today;
+                saveGameState();
+            }
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function showScreen(screenId) {
+            mainScreen.classList.add('hidden');
+            quizScreen.classList.add('hidden');
+            document.getElementById(screenId).classList.remove('hidden');
+        }
+
+        async function startQuiz(themeKey, customData = null) {
+            loadingSpinner.classList.remove('hidden');
+            isReviewMode = customData !== null;
+            isTimeAttackMode = false; // 일반 퀴즈 모드 플래그
+            try {
+                let data;
+                if (isReviewMode) {
+                    data = customData;
+                    quizThemeTitle.innerText = "오답 복습 퀴즈 🧐";
+                    quizThemeTitle.dataset.themeKey = 'review';
+                } else if (themeKey === 'daily') {
+                    data = await getDailyQuiz();
+                    if (data.length === 0) { 
+                        loadingSpinner.classList.add('hidden');
+                        return;
+                    }
+                    quizThemeTitle.innerText = "오늘의 퀴즈 ✨";
+                    quizThemeTitle.dataset.themeKey = 'daily';
+                } else {
+                    const response = await fetch(quizInfo[themeKey].file);
+                    if (!response.ok && window.location.protocol !== 'file:') { 
+                        throw new Error(`데이터를 불러오지 못했습니다. Status: ${response.status}`);
+                    }
+                    data = await response.json();
+                    quizThemeTitle.innerText = quizInfo[themeKey].title;
+                    quizThemeTitle.dataset.themeKey = themeKey;
+                }
+                
+                currentQuizData = shuffleArray(data);
+                currentQuizIndex = 0;
+                score = 0;
+
+                // UI 초기화
+                progressContainer.classList.remove('hidden');
+                timerDisplay.classList.add('hidden');
+                
+                loadQuiz();
+                showScreen('quiz-screen');
+                resultContainer.classList.add('hidden');
+                quizContainer.classList.remove('hidden');
+            } catch (error) {
+                console.error("퀴즈 시작 오류:", error);
+            } finally {
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+        
+        // 모든 퀴즈를 한 번에 평탄화해서 가져오는 함수
+async function getAllFlatQuizzes() {
+    const quizPromises = Object.values(quizInfo).map(info =>
+        fetch(info.file)
+            .then(res => {
+                if (!res.ok && window.location.protocol !== 'file:') {
+                    console.error(`'${info.file}' 파일을 불러오는 데 실패했습니다. Status: ${res.status}`);
+                    return []; // 실패 시 빈 배열 반환
+                }
+                return res.json();
+            })
+            .catch(error => {
+                console.error(`'${info.file}' 파일 처리 중 오류 발생:`, error);
+                return []; // 파싱 오류 등 발생 시 빈 배열 반환
+            })
+    );
+
+    const allQuizData = await Promise.all(quizPromises);
+    // 챕터 구조에서 모든 문제를 평탄화
+    return allQuizData.flatMap(themeArr =>
+        Array.isArray(themeArr)
+            ? themeArr.flatMap(ch => Array.isArray(ch.quizzes) ? ch.quizzes : [])
+            : []
+    );
+}
+
+// 오늘의 퀴즈: 모든 문제 중 랜덤 10문제
+async function startDailyQuiz() {
+    loadingSpinner.classList.remove('hidden');
+    isTimeAttackMode = false;
+    try {
+        // 우리 서버의 API 엔드포인트를 호출합니다.
+        const response = await fetch('/api/daily-quiz');
+        const newQuizzes = await response.json();
+
+        currentQuizData = newQuizzes;
+        currentQuizIndex = 0;
+        score = 0;
+        quizThemeTitle.innerText = "오늘의 퀴즈 ✨";
+        quizThemeTitle.dataset.themeKey = "daily";
+        progressContainer.classList.remove('hidden');
+        timerDisplay.classList.add('hidden');
+        loadQuiz();
+        showScreen('quiz-screen');
+        resultContainer.classList.add('hidden');
+        quizContainer.classList.remove('hidden');
+    } catch (error) {
+        console.error("오늘의 퀴즈 로딩 실패:", error);
+        alert("AI 퀴즈를 불러오는 데 실패했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+        loadingSpinner.classList.add('hidden');
+    }
+}
+
+        function loadQuiz() {
+            answerSelected = false;
+            const currentQuiz = currentQuizData[currentQuizIndex];
+            if (!currentQuiz) { // 타임어택 중 문제가 다 떨어졌을 경우
+                if(isTimeAttackMode) endTimeAttack();
+                return;
+            }
+            questionEl.innerText = currentQuiz.question;
+            optionsContainer.innerHTML = "";
+            const shuffledOptions = shuffleArray([...currentQuiz.options]);
+            shuffledOptions.forEach(optionText => {
+                const button = document.createElement('button');
+                button.innerText = optionText;
+                button.classList.add('option-btn', 'w-full', 'p-4', 'border', 'border-custom', 'rounded-lg', 'text-left', 'transition', 'hover:bg-slate-200', 'dark:hover:bg-slate-700');
+                button.addEventListener('click', () => selectAnswer(button, optionText));
+                optionsContainer.appendChild(button);
+            });
+            if (!isTimeAttackMode) {
+                progressText.innerText = `${currentQuizIndex + 1} / ${currentQuizData.length}`;
+                progressBar.style.width = `${((currentQuizIndex + 1) / currentQuizData.length) * 100}%`;
+            }
+        }
+
+        function selectAnswer(button, selectedOption) {
+            if (answerSelected) return;
+            
+            const currentQuiz = currentQuizData[currentQuizIndex];
+            const isCorrect = selectedOption === currentQuiz.answer;
+
+            if (isTimeAttackMode) {
+                if (isCorrect) {
+                    answerSelected = true;
+                    score++;
+                    if(gameState.settings.soundEnabled) correctSound.triggerAttackRelease("C5", "0.2");
+                    button.classList.add('correct');
+                    timeAttackSolvedQuizzes.push(currentQuiz);
+                    
+                    setTimeout(() => {
+                        currentQuizIndex++;
+                        loadQuiz();
+                    }, 200); // 정답 시 잠깐 초록불 보여주고 넘어감
+                } else {
+                    if(gameState.settings.soundEnabled) incorrectSound.triggerAttackRelease("C3", "0.2");
+                    button.classList.add('incorrect');
+                    button.disabled = true; // 틀린 버튼 비활성화
+                    
+                    // 2초 패널티
+                    optionsContainer.classList.add('pointer-events-none');
+                    setTimeout(() => {
+                        button.classList.remove('incorrect');
+                        button.disabled = false;
+                        optionsContainer.classList.remove('pointer-events-none');
+                    }, 2000); // 2초 패널티로 변경
+                }
+                return;
+            }
+
+            // --- 이하 일반 퀴즈 모드 로직 ---
+            answerSelected = true;
+            const currentPet = petInfo[gameState.settings.selectedPet] || petInfo.cat;
+            let feedbackMessage;
+
+            explanationContainer.classList.remove('bg-green-100', 'dark:bg-green-900', 'bg-red-100', 'dark:bg-red-900');
+
+            if (isCorrect) {
+                score++;
+                button.classList.add('correct');
+                if(gameState.settings.soundEnabled) correctSound.triggerAttackRelease("C5", "0.2");
+                feedbackMessage = currentPet.correct[Math.floor(Math.random() * currentPet.correct.length)];
+                explanationContainer.classList.add('bg-green-100', 'dark:bg-green-900');
+                if (isReviewMode) {
+                    const originalIndex = incorrectQuizzes.findIndex(q => q.question === currentQuiz.question);
+                    if (originalIndex > -1) {
+                        incorrectQuizzes.splice(originalIndex, 1);
+                    }
+                }
+            } else {
+                button.classList.add('incorrect');
+                if(gameState.settings.soundEnabled) incorrectSound.triggerAttackRelease("C3", "0.2");
+                if (!isReviewMode && !incorrectQuizzes.some(q => q.question === currentQuiz.question)) {
+                    incorrectQuizzes.push(currentQuiz);
+                }
+                Array.from(optionsContainer.children).forEach(btn => {
+                    if (btn.innerText === currentQuiz.answer) btn.classList.add('correct');
+                });
+                feedbackMessage = currentPet.incorrect[Math.floor(Math.random() * currentPet.incorrect.length)];
+                explanationContainer.classList.add('bg-red-100', 'dark:bg-red-900');
+            }
+
+            Array.from(optionsContainer.children).forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('cursor-not-allowed');
+            });
+
+            feedbackPetIcon.innerText = currentPet.icon;
+            feedbackMessageEl.innerText = feedbackMessage;
+            explanationTextEl.innerText = currentQuiz.explanation;
+            
+            setTimeout(() => {
+                feedbackModal.classList.remove('hidden');
+            }, 500);
+        }
+
+        function showResults() {
+            saveGameState();
+            resultContainer.classList.remove('hidden');
+            quizContainer.classList.add('hidden');
+            
+            if (isTimeAttackMode) {
+                resultTitle.innerText = "타임어택 종료!";
+                resultMessage.innerHTML = `60초 동안 총 <span class="font-bold text-blue-500">${score}</span>개의 문제를 맞혔습니다!`;
+                restartBtn.classList.add('hidden');
+                reviewExplanationsBtn.classList.remove('hidden');
+            } else {
+                resultTitle.innerText = "퀴즈 완료!";
+                resultMessage.innerHTML = `총 <span id="total-questions" class="font-bold">${currentQuizData.length}</span>문제 중 <span id="score" class="font-bold text-blue-500">${score}</span>개를 맞히셨습니다!`;
+                restartBtn.classList.remove('hidden');
+                reviewExplanationsBtn.classList.add('hidden');
+            }
+        }
+        
+        // --- 타임어택 관련 함수들 ---
+
+        function startTimer(duration) {
+            stopTimer(); // 기존 타이머가 있다면 확실히 중지
+
+            timeLeft = duration;
+            timerDisplay.classList.remove('hidden');
+
+            const updateDisplay = () => {
+                const minutes = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+                const seconds = String(timeLeft % 60).padStart(2, '0');
+                timerDisplay.innerText = `${minutes}:${seconds}`;
+            };
+
+            updateDisplay(); // 즉시 첫 시간 표시
+
+            timeAttackTimer = setInterval(() => {
+                timeLeft--;
+                updateDisplay();
+                if (timeLeft <= 0) {
+                    endTimeAttack();
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timeAttackTimer) {
+                clearInterval(timeAttackTimer);
+                timeAttackTimer = null;
+            }
+        }
+
+
+        async function loadAllQuizzes() {
+            if (allQuizzes.length > 0) return; // 이미 로드되었으면 실행 안 함
+            loadingSpinner.classList.remove('hidden');
+            try {
+                const quizPromises = Object.values(quizInfo).map(info => fetch(info.file).then(res => res.json()));
+                const allQuizData = await Promise.all(quizPromises);
+                // 챕터 구조에서 모든 문제를 평탄화
+                allQuizzes = allQuizData.flatMap(themeArr =>
+                    Array.isArray(themeArr)
+                        ? themeArr.flatMap(ch => Array.isArray(ch.quizzes) ? ch.quizzes : [])
+                        : []
+                );
+            } catch (error) {
+                console.error("전체 퀴즈 데이터 로딩 실패:", error);
+            } finally {
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        async function startTimeAttack() {
+            loadingSpinner.classList.remove('hidden');
+            try {
+                const allQuizzes = await getAllFlatQuizzes();
+                if (allQuizzes.length === 0) {
+                    alert("퀴즈 데이터가 없습니다.");
+                    loadingSpinner.classList.add('hidden');
+                    return;
+                }
+                isTimeAttackMode = true;
+                currentQuizData = shuffleArray([...allQuizzes]);
+                currentQuizIndex = 0;
+                score = 0;
+                timeAttackSolvedQuizzes = [];
+
+                progressContainer.classList.add('hidden');
+                quizThemeTitle.innerText = "타임어택 ⏱️";
+
+                loadQuiz();
+                showScreen('quiz-screen');
+                resultContainer.classList.add('hidden');
+                quizContainer.classList.remove('hidden');
+                startTimer(60); // 60초 타이머 시작
+            } catch (error) {
+                console.error("타임어택 퀴즈 로딩 실패:", error);
+            } finally {
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        function endTimeAttack() {
+            stopTimer();
+            showResults();
+        }
+
+        function startExplanationReview() {
+            reviewIndex = 0;
+            if (timeAttackSolvedQuizzes.length === 0) {
+                feedbackModal.classList.add('hidden');
+                showScreen('main-screen');
+                return;
+            }
+            showReviewModal();
+        }
+
+        function showReviewModal() {
+            const quiz = timeAttackSolvedQuizzes[reviewIndex];
+            const currentPet = petInfo[gameState.settings.selectedPet] || petInfo.cat;
+
+            feedbackPetIcon.innerText = currentPet.icon;
+            feedbackMessageEl.innerText = `[${reviewIndex + 1}/${timeAttackSolvedQuizzes.length}] ${quiz.question}`;
+            explanationTextEl.innerText = quiz.explanation;
+            explanationContainer.classList.remove('bg-green-100', 'dark:bg-green-900', 'bg-red-100', 'dark:bg-red-900');
+            
+            if (reviewIndex === timeAttackSolvedQuizzes.length - 1) {
+                nextBtn.innerText = "메인으로";
+            } else {
+                nextBtn.innerText = "다음";
+            }
+            feedbackModal.classList.remove('hidden');
+        }
+
+
+        function showNotes() {
+            const retryBtn = document.getElementById('retry-notes-btn');
+            if (incorrectQuizzes.length === 0) {
+                notesContent.innerHTML = '<p class="text-center">아직 틀린 문제가 없습니다. 훌륭해요!</p>';
+                retryBtn.disabled = true;
+            } else {
+                notesContent.innerHTML = incorrectQuizzes.map((q, index) => `
+                    <div class="relative mb-2 p-3 bg-slate-50 dark:bg-slate-700 rounded group">
+                        <p class="font-bold pr-8">${index + 1}. ${q.question}</p>
+                        <p class="text-sm text-green-600">정답: ${q.answer}</p>
+                        <button class="delete-note-btn absolute top-1/2 right-2 -translate-y-1/2 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition" data-index="${index}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </button>
+                    </div>
+                `).join('');
+                retryBtn.disabled = false;
+            }
+        }
+        
+        function populatePetSelection() {
+            const container = document.getElementById('pet-selection-container');
+            container.innerHTML = '';
+            for (const key in petInfo) {
+                const pet = petInfo[key];
+                const isSelected = gameState.settings.selectedPet === key;
+                const element = document.createElement('div');
+                element.className = `p-4 rounded-lg flex items-center border-2 ${isSelected ? 'border-blue-500' : 'border-custom'}`;
+                element.innerHTML = `
+                    <div class="text-4xl mr-4">${pet.icon}</div>
+                    <div class="text-left flex-1">
+                        <div class="font-bold">${pet.name}</div>
+                        <div class="text-sm subtext">${pet.description}</div>
+                    </div>
+                    <button data-pet-key="${key}" class="select-pet-btn ml-4 px-4 py-2 rounded-lg text-sm font-bold ${isSelected ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}">${isSelected ? '선택됨' : '선택'}</button>
+                `;
+                container.appendChild(element);
+            }
+        }
+
+// 2. 챕터 선택 UI 함수
+async function showChapterSelect(themeKey) {
+    loadingSpinner.classList.remove('hidden');
+    try {
+        const response = await fetch(quizInfo[themeKey].file);
+        const chapters = await response.json(); // [{chapter, quizzes: [...]}, ...]
+        const chapterModal = document.getElementById('chapter-modal');
+        const chapterList = document.getElementById('chapter-list');
+        chapterList.innerHTML = '';
+        chapters.forEach((ch, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'w-full bg-slate-200 rounded-lg p-4 mb-2 font-bold hover:bg-slate-300';
+            btn.innerText = ch.chapter;
+            btn.addEventListener('click', () => {
+                chapterModal.classList.add('hidden');
+                startQuizWithChapter(ch.quizzes, themeKey, ch.chapter);
+            });
+            chapterList.appendChild(btn);
+        });
+        chapterModal.classList.remove('hidden');
+    } catch (e) {
+        alert('챕터 정보를 불러올 수 없습니다.');
+    } finally {
+        loadingSpinner.classList.add('hidden');
+    }
+}
+
+// 3. 챕터별 퀴즈 시작 함수
+function startQuizWithChapter(quizArr, themeKey, chapterName) {
+    isReviewMode = false;
+    isTimeAttackMode = false;
+    currentQuizData = quizArr;
+    currentQuizIndex = 0;
+    score = 0;
+    quizThemeTitle.innerText = `${quizInfo[themeKey].title} - ${chapterName}`;
+    quizThemeTitle.dataset.themeKey = themeKey;
+    progressContainer.classList.remove('hidden');
+    timerDisplay.classList.add('hidden');
+    loadQuiz();
+    showScreen('quiz-screen');
+    resultContainer.classList.add('hidden');
+    quizContainer.classList.remove('hidden');
+}
+
+// 4. 테마 버튼 클릭 시 챕터 선택으로 연결
+document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const themeKey = btn.dataset.theme;
+        if (quizInfo[themeKey]) {
+            document.getElementById('theme-modal').classList.add('hidden');
+            showChapterSelect(themeKey);
+        }
+    });
+});
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadGameState();
+            applySettings();
+            checkAttendance();
+            updateMainUI();
+            loadAllQuizzes(); // 앱 시작 시 모든 퀴즈 미리 로드
+
+            document.querySelectorAll('.main-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if(gameState.settings.soundEnabled) clickSound.triggerAttackRelease("C4", "0.1");
+                    if (!isBgmInitialized) {
+                        manageBgm();
+                        isBgmInitialized = true;
+                    }
+                });
+            });
+
+            document.getElementById('theme-select-btn').addEventListener('click', () => document.getElementById('theme-modal').classList.remove('hidden'));
+            document.getElementById('notes-btn').addEventListener('click', () => { showNotes(); document.getElementById('notes-modal').classList.remove('hidden'); });
+            document.getElementById('settings-btn').addEventListener('click', () => document.getElementById('settings-modal').classList.remove('hidden'));
+            document.getElementById('pet-select-btn').addEventListener('click', () => {
+                populatePetSelection();
+                document.getElementById('pet-modal').classList.remove('hidden');
+            });
+            document.getElementById('daily-quiz-btn').addEventListener('click', () => startDailyQuiz());
+            document.getElementById('time-attack-btn').addEventListener('click', async () => {
+    if (typeof Tone !== "undefined" && Tone.context && Tone.context.state !== "running") {
+        await Tone.start();
+    }
+    startTimeAttack();
+});
+            reviewExplanationsBtn.addEventListener('click', startExplanationReview); // 해설 보기 시작
+
+            document.querySelectorAll('.modal-close-btn').forEach(btn => btn.addEventListener('click', () => btn.closest('.fixed').classList.add('hidden')));
+            window.addEventListener('click', (e) => { if (e.target.classList.contains('fixed')) e.target.classList.add('hidden'); });
+
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const themeKey = btn.dataset.theme;
+                    if (quizInfo[themeKey]) {
+                        document.getElementById('theme-modal').classList.add('hidden');
+                        showChapterSelect(themeKey);
+                    }
+                });
+            });
+            
+            document.getElementById('pet-selection-container').addEventListener('click', (e) => {
+                const target = e.target.closest('.select-pet-btn');
+                if (target && !target.disabled) {
+                    const petKey = target.dataset.petKey;
+                    gameState.settings.selectedPet = petKey;
+                    saveGameState();
+                    updateMainUI();
+                    populatePetSelection();
+                }
+            });
+
+            document.getElementById('retry-notes-btn').addEventListener('click', () => {
+                const reviewQuizzes = shuffleArray([...incorrectQuizzes]).slice(0, 10);
+                if (reviewQuizzes.length > 0) {
+                    document.getElementById('notes-modal').classList.add('hidden');
+                    startQuiz('review', reviewQuizzes);
+                }
+            });
+
+            nextBtn.addEventListener('click', () => {
+                // 타임어택 해설 리뷰 모드와 일반 퀴즈 모드 분기 처리
+                if (isTimeAttackMode) {
+                    reviewIndex++;
+                    if (reviewIndex < timeAttackSolvedQuizzes.length) {
+                        showReviewModal();
+                    } else {
+                        feedbackModal.classList.add('hidden');
+                        showScreen('main-screen');
+                    }
+                } else { // 일반 퀴즈 모드
+                    feedbackModal.classList.add('hidden');
+                    currentQuizIndex++;
+                    if (currentQuizIndex < currentQuizData.length) {
+                        loadQuiz();
+                    } else {
+                        showResults();
+                    }
+                }
+            });
+
+            restartBtn.addEventListener('click', () => {
+                const themeKey = quizThemeTitle.dataset.themeKey;
+                if (themeKey === 'review' || themeKey === 'daily') {
+                    showScreen('main-screen');
+                } else {
+                    startQuiz(themeKey);
+                }
+            });
+
+            homeBtn.addEventListener('click', () => {
+                stopTimer(); // 홈으로 갈 때 타이머 중지
+                isTimeAttackMode = false;
+                showScreen('main-screen');
+            });
+
+            notesContent.addEventListener('click', (e) => {
+                const deleteBtn = e.target.closest('.delete-note-btn');
+                if (deleteBtn) {
+                    const indexToRemove = parseInt(deleteBtn.dataset.index, 10);
+                    incorrectQuizzes.splice(indexToRemove, 1);
+                    showNotes();
+                }
+            });
+
+            const darkModeToggle = document.getElementById('dark-mode-toggle');
+            darkModeToggle.addEventListener('change', () => {
+                gameState.settings.darkMode = darkModeToggle.checked;
+                saveGameState();
+                applySettings();
+            });
+            
+            const soundToggle = document.getElementById('sound-toggle');
+            soundToggle.addEventListener('change', () => {
+                gameState.settings.soundEnabled = soundToggle.checked;
+                saveGameState();
+            });
+
+            const bgmToggle = document.getElementById('bgm-toggle');
+            bgmToggle.addEventListener('change', () => {
+                gameState.settings.bgmEnabled = bgmToggle.checked;
+                saveGameState();
+                manageBgm();
+            });
+
+            const fontSizeControls = document.getElementById('font-size-controls');
+            fontSizeControls.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const size = e.target.dataset.size;
+                    gameState.settings.fontSize = size;
+                    saveGameState();
+                    applySettings();
+                }
+            });
+
+            /*
+            // 커피 사주기 버튼 이벤트 연결 (임시 비활성화)
+            const coffeeBtn = document.getElementById('coffee-btn');
+            if (coffeeBtn) {
+                coffeeBtn.addEventListener('click', () => {
+                    window.open('https://buymeacoffee.com/mosi1865', '_blank');
+                });
+            }
+            */
+        });
+    </script>
+</body>
+</html>
