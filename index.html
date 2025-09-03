@@ -428,7 +428,7 @@ async function startDailyQuiz() {
         loadQuiz();
         showScreen('quiz-screen');
         resultContainer.classList.add('hidden');
-        quizContainer.classList.remove('hidden');
+        
     } catch (error) {
         console.error("오늘의 퀴즈 로딩 실패:", error);
         alert("AI 퀴즈를 불러오는 데 실패했습니다. 잠시 후 다시 시도해주세요.");
@@ -631,7 +631,7 @@ async function startDailyQuiz() {
                 loadQuiz();
                 showScreen('quiz-screen');
                 resultContainer.classList.add('hidden');
-                quizContainer.classList.remove('hidden');
+                
                 startTimer(60); // 60초 타이머 시작
             } catch (error) {
                 console.error("타임어택 퀴즈 로딩 실패:", error);
