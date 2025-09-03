@@ -7,7 +7,10 @@ const path = require('path');
  */
 function getFallbackQuizzes() {
     console.log("Using fallback quizzes.");
-    const dataDir = path.resolve(process.cwd(), 'data');
+    // Netlify 함수 환경에서 파일 경로를 더 안정적으로 찾기 위해 __dirname을 사용합니다.
+    // __dirname은 현재 실행 중인 스크립트(daily-quiz.js)가 위치한 디렉토리입니다.
+    // ../../data 는 netlify/functions/ 에서 두 단계 위로 올라가 data/ 디렉토리를 찾습니다.
+    const dataDir = path.resolve(__dirname, '../../data');
     const files = fs.readdirSync(dataDir);
     let allQuizzes = [];
 
@@ -48,6 +51,11 @@ exports.handler = async function(event, context) {
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
+
+        if (!response.candidates || response.candidates.length === 0 || !response.candidates[0].content) {
+            throw new Error("Gemini API returned no content. The response may have been blocked due to safety settings or other reasons.");
+        }
+
         let text = response.text();
         
         // Gemini API가 ```json ... ``` 형식으로 응답하는 경우가 있으므로, 순수 JSON만 추출합니다.
